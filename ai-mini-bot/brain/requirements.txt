@@ -1,0 +1,6 @@
+openai
+elevenlabs
+sounddevice
+httpx
+fastembed
+numpy

@@ -1,0 +1,18 @@
+# secrets — never commit these
+.env
+*.key
+
+# python
+venv/
+__pycache__/
+*.pyc
+.python-version
+
+# local memory store (personal conversation data)
+bot_memory/
+brain/bot_memory/
+RobotNotes/
+
+# os junk
+.DS_Store
+Thumbs.db
