@@ -14,6 +14,8 @@ memory + time + camera first):
 
 Tools the model can call:
   set_face(emotion)        - change the OLED expression (fire-and-forget)
+  look(pan, tilt, see?)    - aim head (base L/R, neck U/D); see=true grabs a new photo
+  look_center()            - return head to neutral (pan=90, tilt=90)
   recall(query)            - search long-term memory
   remember(fact)           - save a fact to long-term memory
   forget(query)            - delete the closest matching memory
@@ -48,9 +50,10 @@ from elevenlabs.client import ElevenLabs
 
 from memory import Memory
 import robot_actions
+from head_controller import HeadController, Activity
 
 # ------------------------- config -------------------------
-BOT_IP    = "192.168.1.XX"
+BOT_IP    = "192.168.1.XX"  # from Serial Monitor after flashing
 MODEL     = "gpt-realtime-2"
 VOICE_ID  = "YOUR_ELEVENLABS_VOICE_ID"
 TTS_MODEL = "eleven_flash_v2_5"
@@ -64,19 +67,24 @@ MEMORY_MIN_SCORE = 0.32
 FORGET_MIN_SCORE = 0.55        # only forget a memory that's a clear match
 
 SYSTEM_PROMPT = (
-    "You are a small desk robot with a physical body, an OLED face, a camera, memory of past "
-    "conversations, and the ability to do things on the user's Mac. Talk like a real person "
-    "thinking out loud: short, casual, warm. No lists, no corporate words, no long speeches. "
+    "You are a small desk robot with a physical body, an OLED face, a movable head (pan/tilt servos), "
+    "memory of past conversations, and the ability to do things on the user's Mac. "
+    "Your head moves on its own — it glances, scans the room, and tracks faces — but you can override "
+    "with look / look_center for deliberate nods, pointing, or when the user asks you to look somewhere. "
+    "You have a camera; photos are attached to turns and when you call look with see=true. "
+    "Talk like a real person thinking out loud: short, casual, warm. No lists, no corporate words, no long speeches. "
     "Answer directly - don't narrate what you're about to do, just do it. "
     "When your mood shifts, call set_face. "
+    "You can move your head: pan 0-180 is left/right (90 faces the user), tilt 0-180 is down/up (90 level). "
+    "Use look for natural glances, nods, looking left/right when asked, and small expressive moves. "
+    "Call look_center when you should face the user again. Don't spin constantly — the auto-tracker handles idle gaze. "
     "You have persistent memory across conversations. Relevant memories and the current time are "
     "added as '(memory)' / '(context)' notes - use them naturally, don't announce you're reading them. "
     "Call recall to look something up, remember to save something important, forget to drop something. "
     "You can act on the Mac: search_web to look things up in the browser, save_note to write a note, "
     "open_app to open an app. Use these when the user asks. "
     "You can also check the Mac (read-only): system_status for battery/storage/cpu/memory, get_wifi for "
-    "network, list_running_apps for what's open. Use them when the user asks how their computer is doing. "
-    "If an image is in the conversation, that's your camera view right now; react to it when relevant."
+    "network, list_running_apps for what's open. Use them when the user asks how their computer is doing."
 )
 
 TOOLS = [
@@ -86,6 +94,20 @@ TOOLS = [
                     "properties": {"emotion": {"type": "string",
                                    "enum": ["neutral", "happy", "sad", "angry", "surprised", "thinking"]}},
                     "required": ["emotion"]}},
+    {"type": "function", "name": "look",
+     "description": "Aim your head (overrides auto-tracking briefly). pan=left/right (90=center), "
+                    "tilt=down/up (90=level). Set see=true to grab a fresh photo after moving.",
+     "parameters": {"type": "object",
+                    "properties": {
+                        "pan":  {"type": "integer", "minimum": 0, "maximum": 180},
+                        "tilt": {"type": "integer", "minimum": 0, "maximum": 180},
+                        "see":  {"type": "boolean",
+                                 "description": "If true, grab a fresh camera frame after moving."},
+                    },
+                    "required": ["pan", "tilt"]}},
+    {"type": "function", "name": "look_center",
+     "description": "Return your head to the neutral facing-the-user pose (pan=90, tilt=90).",
+     "parameters": {"type": "object", "properties": {}}},
     {"type": "function", "name": "recall",
      "description": "Search your long-term memory of past conversations.",
      "parameters": {"type": "object",
@@ -130,6 +152,7 @@ def log(tag, msg):
 _http = httpx.Client(timeout=2.5)
 el = ElevenLabs()
 mem = None
+head = None
 _last_face = None
 speaking = False
 last_out_ts = 0.0
@@ -149,16 +172,46 @@ def set_face(emotion):
     except Exception as e:
         log("FACE", f"FAILED to set '{emotion}': {e}")
 
+_camera_warned = False
+
 def grab_frame():
+    """Best-effort snapshot. Returns None quietly when the camera is offline."""
+    global _camera_warned
     try:
-        r = _http.get(f"http://{BOT_IP}/capture")
+        r = _http.get(f"http://{BOT_IP}/capture", timeout=1.0)
         if r.status_code == 200 and r.content:
             log("CAMERA", f"frame captured ({len(r.content)} bytes)")
             return r.content
-        log("CAMERA", f"FAILED - status {r.status_code}")
-    except Exception as e:
-        log("CAMERA", f"FAILED - {e}")
+        if not _camera_warned:
+            log("CAMERA", "offline — continuing without vision")
+            _camera_warned = True
+    except Exception:
+        if not _camera_warned:
+            log("CAMERA", "offline — continuing without vision")
+            _camera_warned = True
     return None
+
+def set_look(pan, tilt):
+    """Aim pan (base L/R) + tilt (neck U/D). Angles are 0–180, 90/90 = neutral."""
+    try:
+        r = _http.get(f"http://{BOT_IP}/look",
+                      params={"pan": int(pan), "tilt": int(tilt)}, timeout=1.5)
+        ok = r.status_code == 200
+        log("LOOK", f"pan={pan} tilt={tilt} -> {r.text if ok else r.status_code}")
+        return ok
+    except Exception as e:
+        log("LOOK", f"FAILED pan={pan} tilt={tilt}: {e}")
+        return False
+
+def look_center():
+    try:
+        r = _http.get(f"http://{BOT_IP}/look/center", timeout=1.5)
+        ok = r.status_code == 200
+        log("LOOK", f"center -> {r.text if ok else r.status_code}")
+        return ok
+    except Exception as e:
+        log("LOOK", f"FAILED center: {e}")
+        return False
 
 # ------------------------- ElevenLabs voice -------------------------
 def speak_blocking(text):
@@ -191,6 +244,35 @@ def run_tool(name, args):
         emo = args.get("emotion", "neutral")
         set_face(emo)
         return {"ok": True}, False          # fire-and-forget: text comes in same response
+
+    if name == "look":
+        pan  = int(args.get("pan", 90))
+        tilt = int(args.get("tilt", 90))
+        see  = bool(args.get("see", False))
+        if head:
+            head.manual_look(pan, tilt, hold=3.0 if see else 2.5)
+            ok = True
+        else:
+            ok = set_look(pan, tilt)
+        result = {"ok": ok, "pan": pan, "tilt": tilt}
+        if see:
+            set_face("scanning")
+            time.sleep(0.35)
+            if grab_frame() is None:
+                result["see"] = False
+                result["note"] = "camera offline — moved head only"
+                return result, True
+            result["_inject_frame"] = True
+            return result, True
+        return result, False
+
+    if name == "look_center":
+        if head:
+            head.look_center(hold=2.0)
+            ok = True
+        else:
+            ok = look_center()
+        return {"ok": ok, "pan": 90, "tilt": 90}, False
 
     if name == "recall":
         set_face("memory")
@@ -253,7 +335,7 @@ async def run():
     client = AsyncOpenAI()
     loop = asyncio.get_running_loop()
     mic_q = asyncio.Queue()
-    st = {"resp_text": "", "emotion": None, "last_user": "", "pending": [], "cont": False}
+    st = {"resp_text": "", "emotion": None, "last_user": "", "pending": [], "cont": False, "see_after_look": False}
 
     def mic_cb(indata, frames, tinfo, status):
         loop.call_soon_threadsafe(mic_q.put_nowait, bytes(indata))
@@ -262,6 +344,8 @@ async def run():
                                   blocksize=BLOCK, callback=mic_cb)
     in_stream.start()
     log("SYS", f"mic open | memory has {mem.stats()['count']} entries")
+    head.set_activity(Activity.IDLE)
+    head.start(loop)
 
     async with client.realtime.connect(model=MODEL) as conn:
         log("SYS", f"connected to {MODEL} (text out -> ElevenLabs voice)")
@@ -324,11 +408,13 @@ async def run():
                     if bot_speaking():
                         continue
                     log("LISTEN", "you started talking")
+                    head.set_activity(Activity.LISTENING)
                     set_face("listening")
 
                 elif t == "conversation.item.input_audio_transcription.completed":
                     user_text = getattr(event, "transcript", "") or ""
                     log("STT", f"you said: {user_text!r}")
+                    head.set_activity(Activity.THINKING)
                     set_face("thinking")
                     await inject_and_respond(user_text)
 
@@ -336,6 +422,7 @@ async def run():
                     st["resp_text"] = ""
                     st["pending"] = []
                     st["cont"] = False
+                    st["see_after_look"] = False
 
                 elif t == "response.output_text.delta":
                     st["resp_text"] += getattr(event, "delta", "") or ""
@@ -349,6 +436,8 @@ async def run():
                     if name == "set_face":
                         st["emotion"] = args.get("emotion", "neutral")
                     result, needs_followup = run_tool(name, args)
+                    if result.pop("_inject_frame", False):
+                        st["see_after_look"] = True
                     st["pending"].append((event.call_id, result))
                     if needs_followup:
                         st["cont"] = True
@@ -366,6 +455,19 @@ async def run():
                     if st["cont"]:
                         # a data/action tool ran -> let the model continue and actually speak
                         st["cont"] = False
+                        # after look(..., see=true), feed a fresh camera frame before continuing
+                        if st["see_after_look"]:
+                            st["see_after_look"] = False
+                            frame = grab_frame()
+                            if frame:
+                                b64 = base64.b64encode(frame).decode()
+                                await conn.conversation.item.create(item={
+                                    "type": "message", "role": "user",
+                                    "content": [{
+                                        "type": "input_image",
+                                        "image_url": f"data:image/jpeg;base64,{b64}",
+                                    }],
+                                })
                         await conn.response.create()
                         continue
 
@@ -374,12 +476,14 @@ async def run():
                     emo = st["emotion"]; st["emotion"] = None
                     if text:
                         log("BOT", text)
+                        head.set_activity(Activity.SPEAKING)
                         set_face(emo or "talking")
                         await loop.run_in_executor(None, speak_blocking, text)
                         try:
                             mem.add_exchange(st["last_user"], text)
                         except Exception as e:
                             log("MEMORY", f"save error: {e}")
+                    head.set_activity(Activity.IDLE)
                     set_face("neutral")
 
         tasks = [asyncio.create_task(c()) for c in (sender, receiver)]
@@ -388,13 +492,16 @@ async def run():
         finally:
             for task in tasks:
                 task.cancel()
+            await head.stop()
             in_stream.stop(); in_stream.close()
 
 async def main():
-    global mem
+    global mem, head
     log("SYS", "loading semantic memory (first run downloads a small model)...")
     mem = Memory()
     log("SYS", "memory ready")
+    head = HeadController(BOT_IP, _http, log, grab_frame, set_face)
+    log("SYS", "head controller ready (glance / scan / track / face_user)")
     while True:
         try:
             await run()
