@@ -6,6 +6,8 @@
     <title>Ari Bot UI</title>
     <style>
       :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
       body {
         margin: 0;
         font-family: Inter, Segoe UI, Arial, sans-serif;
@@ -13,10 +15,14 @@
         color: #3d2a5a;
         display: grid;
         place-items: center;
-        min-height: 100vh;
+        height: 100vh;
+        overflow: hidden;
       }
       .card {
-        width: min(92vw, 760px);
+        width: min(94vw, 760px);
+        height: min(94vh, 760px);
+        display: flex;
+        flex-direction: column;
         background: rgba(255, 255, 255, 0.9);
         border: 1px solid rgba(129, 92, 198, 0.18);
         border-radius: 24px;
@@ -34,7 +40,8 @@
       .title { font-size: 1.1rem; font-weight: 700; color: #6d3ca8; }
       .pill { font-size: 0.8rem; padding: 6px 10px; border-radius: 999px; background: linear-gradient(135deg, #ffb2d3, #c9b3ff); color: #4c2d79; }
       .messages {
-        height: 480px;
+        flex: 1;
+        min-height: 0;
         overflow: auto;
         padding: 16px 18px;
         display: flex;
