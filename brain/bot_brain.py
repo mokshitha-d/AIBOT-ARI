@@ -42,6 +42,7 @@ import base64
 import json
 import time
 from datetime import datetime
+from pathlib import Path
 
 import httpx
 import sounddevice as sd
@@ -57,6 +58,9 @@ BOT_IP    = "192.168.1.XX"  # from Serial Monitor after flashing
 MODEL     = "gpt-realtime-2"
 VOICE_ID  = "YOUR_ELEVENLABS_VOICE_ID"
 TTS_MODEL = "eleven_flash_v2_5"
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2")
+USE_OLLAMA = os.environ.get("USE_OLLAMA", "1").lower() in {"1", "true", "yes", "on"}
 
 SR = 24000
 BLOCK = 2400
@@ -495,11 +499,68 @@ async def run():
             await head.stop()
             in_stream.stop(); in_stream.close()
 
+def ollama_generate(prompt):
+    try:
+        resp = _http.post(
+            f"{OLLAMA_BASE_URL}/api/generate",
+            json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False, "options": {"temperature": 0.7}},
+            timeout=180,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return (data.get("response") or "").strip()
+    except Exception as e:
+        log("OLLAMA", f"request failed: {e}")
+        return None
+
+
+def run_text_mode():
+    global mem
+    log("SYS", "running in local Ollama text mode")
+    log("SYS", f"using model '{OLLAMA_MODEL}' at {OLLAMA_BASE_URL}")
+    while True:
+        try:
+            user_text = input("You: ").strip()
+        except EOFError:
+            break
+        if not user_text:
+            continue
+        if user_text.lower() in {"exit", "quit", "bye"}:
+            print("Bot: Goodbye.")
+            break
+
+        recalled = mem.recall_text(user_text, k=MEMORY_K, min_score=MEMORY_MIN_SCORE)
+        note = f"(context) Current time: {robot_actions.current_time()}."
+        if recalled:
+            note += f"\n(memory) {recalled}"
+
+        prompt = (
+            f"{SYSTEM_PROMPT}\n\n"
+            f"{note}\n\n"
+            f"User: {user_text}\n"
+            "Assistant:"
+        )
+        reply = ollama_generate(prompt)
+        if not reply:
+            reply = "I couldn't reach the local model. Make sure Ollama is running and the model is installed."
+        log("BOT", reply)
+        print(f"Bot: {reply}")
+        try:
+            mem.add_exchange(user_text, reply)
+        except Exception as e:
+            log("MEMORY", f"save error: {e}")
+
+
 async def main():
     global mem, head
     log("SYS", "loading semantic memory (first run downloads a small model)...")
     mem = Memory()
     log("SYS", "memory ready")
+
+    if USE_OLLAMA:
+        run_text_mode()
+        return
+
     head = HeadController(BOT_IP, _http, log, grab_frame, set_face)
     log("SYS", "head controller ready (glance / scan / track / face_user)")
     while True:
@@ -513,11 +574,29 @@ async def main():
             log("SYS", "reconnecting in 3s...")
             await asyncio.sleep(3)
 
+def load_env_file():
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    if not env_path.exists():
+        return
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
 if __name__ == "__main__":
-    for k in ("OPENAI_API_KEY", "ELEVENLABS_API_KEY"):
-        if not os.environ.get(k):
-            print(f"Set {k} first:  export {k}='...'")
-            raise SystemExit(1)
+    load_env_file()
+    if USE_OLLAMA:
+        log("SYS", "Ollama mode enabled; no paid API keys required")
+    else:
+        for k in ("OPENAI_API_KEY", "ELEVENLABS_API_KEY"):
+            if not os.environ.get(k):
+                print(f"Set {k} first:  export {k}='...'")
+                raise SystemExit(1)
     log("SYS", f"bot face target: http://{BOT_IP}  (confirm it matches Serial Monitor)")
     try:
         asyncio.run(main())

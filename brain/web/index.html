@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Ari Bot UI</title>
+    <style>
+      :root { color-scheme: light; }
+      body {
+        margin: 0;
+        font-family: Inter, Segoe UI, Arial, sans-serif;
+        background: linear-gradient(135deg, #fff2f8 0%, #edf7ff 45%, #f3edff 100%);
+        color: #3d2a5a;
+        display: grid;
+        place-items: center;
+        min-height: 100vh;
+      }
+      .card {
+        width: min(92vw, 760px);
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid rgba(129, 92, 198, 0.18);
+        border-radius: 24px;
+        box-shadow: 0 18px 50px rgba(152, 116, 255, 0.16);
+        overflow: hidden;
+      }
+      .header {
+        padding: 18px 22px;
+        border-bottom: 1px solid rgba(129, 92, 198, 0.14);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: linear-gradient(90deg, rgba(255, 226, 240, 0.8), rgba(225, 240, 255, 0.8));
+      }
+      .title { font-size: 1.1rem; font-weight: 700; color: #6d3ca8; }
+      .pill { font-size: 0.8rem; padding: 6px 10px; border-radius: 999px; background: linear-gradient(135deg, #ffb2d3, #c9b3ff); color: #4c2d79; }
+      .messages {
+        height: 480px;
+        overflow: auto;
+        padding: 16px 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        background: linear-gradient(180deg, rgba(253, 242, 247, 0.8), rgba(239, 247, 255, 0.8));
+      }
+      .msg { max-width: 82%; padding: 10px 12px; border-radius: 14px; line-height: 1.45; color: #2f2344; }
+      .msg.user { align-self: flex-end; background: linear-gradient(135deg, #b9d7ff, #cdb3ff); }
+      .msg.bot { align-self: flex-start; background: linear-gradient(135deg, #ffe0ef, #e8e2ff); }
+      .composer { display: flex; gap: 10px; padding: 14px; border-top: 1px solid rgba(129, 92, 198, 0.14); }
+      input, select { flex: 1; border: 1px solid #d8c9f7; border-radius: 999px; padding: 12px 14px; outline: none; font-size: 1rem; background: #fff; color: #3d2a5a; }
+      button { border: 0; border-radius: 999px; padding: 12px 16px; background: linear-gradient(135deg, #ff9fc7, #8fb8ff); color: #3b2457; font-weight: 700; cursor: pointer; }
+      button:hover { filter: brightness(1.05); }
+      .hint { font-size: 0.82rem; color: #6e5b90; padding: 0 18px 14px; }
+      .controls { display: flex; gap: 8px; align-items: center; padding: 0 18px 12px; flex-wrap: wrap; }
+      .voice-picker { display: flex; align-items: center; gap: 8px; color: #5f4e84; font-size: 0.9rem; }
+      .voice-picker select { min-width: 220px; }
+      .status { font-size: 0.85rem; color: #6d5a90; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="header">
+        <div>
+          <div class="title">Ari Bot</div>
+          <div style="font-size:0.9rem;color:#cbd5e1">Friendly local bot for kids and family interaction</div>
+        </div>
+        <div class="pill">Local</div>
+      </div>
+      <div class="messages" id="messages"></div>
+      <div class="hint">Try asking: “What can you do?” or “Tell me a short story.”</div>
+      <div class="controls">
+        <button id="mic">🎤 Speak</button>
+        <button id="stop">⏹ Stop</button>
+        <label class="voice-picker">
+          <span>Voice</span>
+          <select id="voiceSelect"></select>
+        </label>
+        <span class="status" id="status">Voice ready</span>
+      </div>
+      <div class="composer">
+        <input id="input" placeholder="Type a message..." />
+        <button id="send">Send</button>
+      </div>
+    </div>
+    <script>
+      const messages = document.getElementById('messages');
+      const input = document.getElementById('input');
+      const sendBtn = document.getElementById('send');
+      const micBtn = document.getElementById('mic');
+      const stopBtn = document.getElementById('stop');
+      const statusEl = document.getElementById('status');
+      const voiceSelect = document.getElementById('voiceSelect');
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      let recognition;
+      let speaking = false;
+      let availableVoices = [];
+
+      function setStatus(text) {
+        statusEl.textContent = text;
+      }
+
+      function addMessage(text, who) {
+        const div = document.createElement('div');
+        div.className = `msg ${who}`;
+        div.textContent = text;
+        messages.appendChild(div);
+        messages.scrollTop = messages.scrollHeight;
+      }
+
+      function populateVoices() {
+        if (!('speechSynthesis' in window)) return;
+        availableVoices = window.speechSynthesis.getVoices();
+        const current = voiceSelect.value;
+        voiceSelect.innerHTML = '';
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = 'Default voice';
+        voiceSelect.appendChild(defaultOption);
+        availableVoices.forEach((voice) => {
+          const option = document.createElement('option');
+          option.value = voice.name;
+          option.textContent = `${voice.name} (${voice.lang})`;
+          if (current && voice.name === current) option.selected = true;
+          voiceSelect.appendChild(option);
+        });
+        if (!voiceSelect.value && availableVoices.length) {
+          voiceSelect.value = availableVoices[0].name;
+        }
+      }
+
+      function speakText(text) {
+        if (!('speechSynthesis' in window)) return;
+        if (speaking) window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'en-US';
+        const selectedVoice = availableVoices.find((voice) => voice.name === voiceSelect.value);
+        if (selectedVoice) utterance.voice = selectedVoice;
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+        speaking = true;
+        utterance.onend = () => { speaking = false; };
+        window.speechSynthesis.speak(utterance);
+      }
+
+      async function send(text) {
+        const value = (text || input.value).trim();
+        if (!value) return;
+        addMessage(value, 'user');
+        input.value = '';
+        addMessage('Thinking...', 'bot');
+        try {
+          const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: value })
+          });
+          const data = await response.json();
+          const last = messages.lastElementChild;
+          if (last) last.remove();
+          const reply = data.reply || 'Sorry, I could not reply.';
+          addMessage(reply, 'bot');
+          speakText(reply);
+        } catch (e) {
+          const last = messages.lastElementChild;
+          if (last) last.remove();
+          addMessage('The bot is unavailable. Please start the backend service.', 'bot');
+        }
+      }
+
+      if (SpeechRecognition) {
+        recognition = new SpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.lang = 'en-US';
+        recognition.onstart = () => setStatus('Listening...');
+        recognition.onerror = () => setStatus('Voice unavailable');
+        recognition.onend = () => setStatus('Voice ready');
+        recognition.onresult = (event) => {
+          const transcript = event.results[0][0].transcript;
+          setStatus('Heard: ' + transcript);
+          send(transcript);
+        };
+      } else {
+        setStatus('Speech recognition not supported');
+      }
+
+      if ('speechSynthesis' in window) {
+        populateVoices();
+        window.speechSynthesis.onvoiceschanged = populateVoices;
+      }
+
+      voiceSelect.addEventListener('change', () => {
+        if (voiceSelect.value) {
+          setStatus('Voice: ' + voiceSelect.value);
+        }
+      });
+
+      stopBtn.addEventListener('click', () => {
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+          speaking = false;
+        }
+        if (recognition) {
+          try { recognition.stop(); } catch (e) {}
+        }
+        setStatus('Voice stopped');
+      });
+
+      micBtn.addEventListener('click', () => {
+        if (recognition) recognition.start();
+      });
+      sendBtn.addEventListener('click', () => send());
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
+      addMessage('Hi! I am Ari, your friendly local robot. Ask me anything.', 'bot');
+    </script>
+  </body>
+</html>
