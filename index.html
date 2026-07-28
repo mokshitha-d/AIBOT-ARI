@@ -16,11 +16,13 @@
         display: grid;
         place-items: center;
         height: 100vh;
+        height: 100dvh;
         overflow: hidden;
       }
       .card {
         width: min(94vw, 760px);
         height: min(94vh, 760px);
+        height: min(94dvh, 760px);
         display: flex;
         flex-direction: column;
         background: rgba(255, 255, 255, 0.9);
@@ -30,6 +32,7 @@
         overflow: hidden;
       }
       .header {
+        flex-shrink: 0;
         padding: 18px 22px;
         border-bottom: 1px solid rgba(129, 92, 198, 0.14);
         display: flex;
@@ -52,15 +55,26 @@
       .msg { max-width: 82%; padding: 10px 12px; border-radius: 14px; line-height: 1.45; color: #2f2344; }
       .msg.user { align-self: flex-end; background: linear-gradient(135deg, #b9d7ff, #cdb3ff); }
       .msg.bot { align-self: flex-start; background: linear-gradient(135deg, #ffe0ef, #e8e2ff); }
-      .composer { display: flex; gap: 10px; padding: 14px; border-top: 1px solid rgba(129, 92, 198, 0.14); }
-      input, select { flex: 1; border: 1px solid #d8c9f7; border-radius: 999px; padding: 12px 14px; outline: none; font-size: 1rem; background: #fff; color: #3d2a5a; }
-      button { border: 0; border-radius: 999px; padding: 12px 16px; background: linear-gradient(135deg, #ff9fc7, #8fb8ff); color: #3b2457; font-weight: 700; cursor: pointer; }
+      .composer { flex-shrink: 0; display: flex; gap: 10px; padding: 14px; border-top: 1px solid rgba(129, 92, 198, 0.14); }
+      input, select { flex: 1; border: 1px solid #d8c9f7; border-radius: 999px; padding: 12px 14px; outline: none; font-size: 1rem; background: #fff; color: #3d2a5a; min-width: 0; }
+      button { border: 0; border-radius: 999px; padding: 12px 16px; background: linear-gradient(135deg, #ff9fc7, #8fb8ff); color: #3b2457; font-weight: 700; cursor: pointer; white-space: nowrap; }
       button:hover { filter: brightness(1.05); }
-      .hint { font-size: 0.82rem; color: #6e5b90; padding: 0 18px 14px; }
-      .controls { display: flex; gap: 8px; align-items: center; padding: 0 18px 12px; flex-wrap: wrap; }
+      .hint { flex-shrink: 0; font-size: 0.82rem; color: #6e5b90; padding: 0 18px 14px; }
+      .controls { flex-shrink: 0; display: flex; gap: 8px; align-items: center; padding: 0 18px 12px; flex-wrap: wrap; }
       .voice-picker { display: flex; align-items: center; gap: 8px; color: #5f4e84; font-size: 0.9rem; }
       .voice-picker select { min-width: 220px; }
       .status { font-size: 0.85rem; color: #6d5a90; }
+
+      @media (max-width: 480px) {
+        .card { width: 100vw; height: 100vh; height: 100dvh; max-height: none; border-radius: 0; }
+        .header { padding: 14px 16px; }
+        .hint { display: none; }
+        .controls { padding: 0 12px 10px; gap: 6px; }
+        .voice-picker { flex-basis: 100%; }
+        .voice-picker select { min-width: 0; flex: 1; }
+        .status { display: none; }
+        .composer { padding: 10px; }
+      }
     </style>
   </head>
   <body>
