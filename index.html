@@ -141,29 +141,37 @@
         window.speechSynthesis.speak(utterance);
       }
 
-      async function send(text) {
+      function getOfflineReply(message) {
+        const text = message.toLowerCase();
+        if (/(hello|hi|hey)/.test(text)) {
+          return 'Hi there! I am Ari, your friendly demo bot. Ask me about the project, request a joke, or say hello.';
+        }
+        if (/(joke|funny)/.test(text)) {
+          return 'Sure — why did the robot cross the road? To get to the other side of the circuit!';
+        }
+        if (/(what can you do|help)/.test(text)) {
+          return 'I can chat, answer simple questions, and speak out loud. I am designed as a free hosted demo for sharing with friends.';
+        }
+        if (/(who are you|your name)/.test(text)) {
+          return 'I am Ari, a friendly demo bot built for sharing online.';
+        }
+        if (/(story|tell me)/.test(text)) {
+          return 'Once, a small bot named Ari helped a family laugh, learn, and explore new ideas together.';
+        }
+        if (/(weather|time)/.test(text)) {
+          return 'I cannot see live weather or clock data in this demo, but I can keep the conversation going.';
+        }
+        return 'I am running as a hosted demo, so I can still chat even when the laptop is off. Ask me about the project or tell me a joke.';
+      }
+
+      function send(text) {
         const value = (text || input.value).trim();
         if (!value) return;
         addMessage(value, 'user');
         input.value = '';
-        addMessage('Thinking...', 'bot');
-        try {
-          const response = await fetch('/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: value })
-          });
-          const data = await response.json();
-          const last = messages.lastElementChild;
-          if (last) last.remove();
-          const reply = data.reply || 'Sorry, I could not reply.';
-          addMessage(reply, 'bot');
-          speakText(reply);
-        } catch (e) {
-          const last = messages.lastElementChild;
-          if (last) last.remove();
-          addMessage('The bot is unavailable. Please start the backend service.', 'bot');
-        }
+        const reply = getOfflineReply(value);
+        addMessage(reply, 'bot');
+        speakText(reply);
       }
 
       if (SpeechRecognition) {
