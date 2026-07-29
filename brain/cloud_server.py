@@ -5,9 +5,12 @@ Deploy target: Render free web service. Start command: python cloud_server.py
 """
 import json
 import os
+import sys
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+sys.stdout.reconfigure(line_buffering=True)
 
 HOST = '0.0.0.0'
 PORT = int(os.environ.get('PORT', 8000))
@@ -22,9 +25,9 @@ SYSTEM_PROMPT = (
 )
 
 
-def groq_generate(message):
+def _groq_call(message):
     if not GROQ_API_KEY:
-        return "Ari's brain isn't connected yet — ask the bot's owner to set GROQ_API_KEY."
+        raise RuntimeError('GROQ_API_KEY is not set on this service')
     body = json.dumps({
         "model": GROQ_MODEL,
         "messages": [
@@ -43,10 +46,14 @@ def groq_generate(message):
         },
         method='POST',
     )
+    with urllib.request.urlopen(req, timeout=20) as resp:
+        data = json.loads(resp.read().decode('utf-8'))
+        return data['choices'][0]['message']['content'].strip()
+
+
+def groq_generate(message):
     try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            data = json.loads(resp.read().decode('utf-8'))
-            return data['choices'][0]['message']['content'].strip()
+        return _groq_call(message)
     except urllib.error.HTTPError as e:
         print(f"[GROQ] HTTP {e.code}: {e.read().decode('utf-8', errors='ignore')}")
         return "Sorry, my brain hiccuped. Try asking again in a moment."
@@ -73,6 +80,26 @@ class Handler(BaseHTTPRequestHandler):
                 body = f.read()
             self.send_response(200)
             self.send_header('Content-Type', 'text/html; charset=utf-8')
+            self.send_header('Content-Length', str(len(body)))
+            self._cors()
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if self.path == '/health':
+            info = {
+                'groq_key_set': bool(GROQ_API_KEY),
+                'groq_key_length': len(GROQ_API_KEY),
+                'model': GROQ_MODEL,
+            }
+            try:
+                info['test_reply'] = _groq_call('Reply with exactly: OK')
+            except urllib.error.HTTPError as e:
+                info['test_error'] = f'HTTP {e.code}: {e.read().decode("utf-8", errors="ignore")}'
+            except Exception as e:
+                info['test_error'] = str(e)
+            body = json.dumps(info).encode('utf-8')
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
             self.send_header('Content-Length', str(len(body)))
             self._cors()
             self.end_headers()
