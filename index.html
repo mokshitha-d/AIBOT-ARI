@@ -185,12 +185,32 @@
         return 'I am running as a hosted demo, so I can still chat even when the laptop is off. Ask me about the project or tell me a joke.';
       }
 
-      function send(text) {
+      const BACKEND_URL = 'https://ari-bot-brain.onrender.com/api/chat';
+
+      async function send(text) {
         const value = (text || input.value).trim();
         if (!value) return;
         addMessage(value, 'user');
         input.value = '';
-        const reply = getOfflineReply(value);
+        addMessage('Thinking...', 'bot');
+        let reply;
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 45000);
+          const response = await fetch(BACKEND_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: value }),
+            signal: controller.signal,
+          });
+          clearTimeout(timeout);
+          const data = await response.json();
+          reply = data.reply || getOfflineReply(value);
+        } catch (e) {
+          reply = getOfflineReply(value);
+        }
+        const last = messages.lastElementChild;
+        if (last) last.remove();
         addMessage(reply, 'bot');
         speakText(reply);
       }
