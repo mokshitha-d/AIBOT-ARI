@@ -43,6 +43,7 @@ def _groq_call(message):
         headers={
             'Content-Type': 'application/json',
             'Authorization': f'Bearer {GROQ_API_KEY}',
+            'User-Agent': 'Mozilla/5.0 (compatible; AriBotCloudServer/1.0)',
         },
         method='POST',
     )
