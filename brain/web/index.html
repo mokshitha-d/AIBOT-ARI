@@ -5,19 +5,43 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Ari Bot UI</title>
     <style>
-      :root { color-scheme: light; }
+      :root {
+        color-scheme: light;
+        --bg-gradient: linear-gradient(135deg, #fff2f8 0%, #edf7ff 45%, #f3edff 100%);
+        --header-gradient: linear-gradient(90deg, rgba(255, 226, 240, 0.8), rgba(225, 240, 255, 0.8));
+        --messages-gradient: linear-gradient(180deg, rgba(253, 242, 247, 0.8), rgba(239, 247, 255, 0.8));
+        --accent-1: #ff9fc7;
+        --accent-2: #8fb8ff;
+        --title-color: #6d3ca8;
+        --text-color: #3d2a5a;
+      }
       * { box-sizing: border-box; }
       html, body { height: 100%; }
       body {
         margin: 0;
         font-family: Inter, Segoe UI, Arial, sans-serif;
-        background: linear-gradient(135deg, #fff2f8 0%, #edf7ff 45%, #f3edff 100%);
-        color: #3d2a5a;
+        color: var(--text-color);
         display: grid;
         place-items: center;
         height: 100vh;
         height: 100dvh;
         overflow: hidden;
+      }
+      .bg-photos {
+        position: fixed;
+        inset: 0;
+        z-index: -2;
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        grid-template-rows: repeat(2, 1fr);
+      }
+      .bg-photos img { width: 100%; height: 100%; object-fit: cover; display: block; }
+      .bg-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+        background: var(--bg-gradient);
+        opacity: 0.78;
       }
       .card {
         width: min(94vw, 760px);
@@ -38,10 +62,9 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        background: linear-gradient(90deg, rgba(255, 226, 240, 0.8), rgba(225, 240, 255, 0.8));
+        background: var(--header-gradient);
       }
-      .title { font-size: 1.1rem; font-weight: 700; color: #6d3ca8; }
-      .pill { font-size: 0.8rem; padding: 6px 10px; border-radius: 999px; background: linear-gradient(135deg, #ffb2d3, #c9b3ff); color: #4c2d79; }
+      .title { font-size: 1.1rem; font-weight: 700; color: var(--title-color); }
       .messages {
         flex: 1;
         min-height: 0;
@@ -50,52 +73,54 @@
         display: flex;
         flex-direction: column;
         gap: 10px;
-        background: linear-gradient(180deg, rgba(253, 242, 247, 0.8), rgba(239, 247, 255, 0.8));
+        background: var(--messages-gradient);
       }
       .msg { max-width: 82%; padding: 10px 12px; border-radius: 14px; line-height: 1.45; color: #2f2344; }
       .msg.user { align-self: flex-end; background: linear-gradient(135deg, #b9d7ff, #cdb3ff); }
       .msg.bot { align-self: flex-start; background: linear-gradient(135deg, #ffe0ef, #e8e2ff); }
       .composer { flex-shrink: 0; display: flex; gap: 10px; padding: 14px; border-top: 1px solid rgba(129, 92, 198, 0.14); }
-      input, select { flex: 1; border: 1px solid #d8c9f7; border-radius: 999px; padding: 12px 14px; outline: none; font-size: 1rem; background: #fff; color: #3d2a5a; min-width: 0; }
-      button { border: 0; border-radius: 999px; padding: 12px 16px; background: linear-gradient(135deg, #ff9fc7, #8fb8ff); color: #3b2457; font-weight: 700; cursor: pointer; white-space: nowrap; }
+      input { flex: 1; border: 1px solid #d8c9f7; border-radius: 999px; padding: 12px 14px; outline: none; font-size: 1rem; background: #fff; color: #3d2a5a; min-width: 0; }
+      button { border: 0; border-radius: 999px; padding: 12px 16px; background: linear-gradient(135deg, var(--accent-1), var(--accent-2)); color: #3b2457; font-weight: 700; cursor: pointer; white-space: nowrap; }
       button:hover { filter: brightness(1.05); }
       .hint { flex-shrink: 0; font-size: 0.82rem; color: #6e5b90; padding: 0 18px 14px; }
-      .controls { flex-shrink: 0; display: flex; gap: 8px; align-items: center; padding: 0 18px 12px; flex-wrap: wrap; }
-      .voice-picker { display: flex; align-items: center; gap: 8px; color: #5f4e84; font-size: 0.9rem; }
-      .voice-picker select { min-width: 220px; }
-      .status { font-size: 0.85rem; color: #6d5a90; }
+      .mode-toggle { flex-shrink: 0; display: flex; gap: 8px; padding: 0 18px 12px; }
+      .mode-btn {
+        flex: 1;
+        background: rgba(255, 255, 255, 0.7);
+        border: 1px solid rgba(129, 92, 198, 0.25);
+        color: #5f4a80;
+        font-weight: 600;
+        padding: 10px 12px;
+      }
+      .mode-btn.active {
+        background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+        color: #3b2457;
+        border-color: transparent;
+      }
 
       @media (max-width: 480px) {
         .card { width: 100vw; height: 100vh; height: 100dvh; max-height: none; border-radius: 0; }
         .header { padding: 14px 16px; }
         .hint { display: none; }
-        .controls { padding: 0 12px 10px; gap: 6px; }
-        .voice-picker { flex-basis: 100%; }
-        .voice-picker select { min-width: 0; flex: 1; }
-        .status { display: none; }
         .composer { padding: 10px; }
       }
     </style>
   </head>
   <body>
+    <div class="bg-photos" id="bgPhotos"></div>
+    <div class="bg-overlay"></div>
     <div class="card">
       <div class="header">
         <div>
-          <div class="title">Ari Bot</div>
-          <div style="font-size:0.95rem;font-weight:600;color:#5f4a80">Your Friend Ari - Ask Anything!</div>
+          <div class="title">Ari</div>
+          <div style="font-size:0.95rem;font-weight:600;color:#5f4a80">i got ur back</div>
         </div>
-        <div class="pill">Local</div>
       </div>
       <div class="messages" id="messages"></div>
-      <div class="hint">Try asking: “What can you do?” or “Tell me a short story.”</div>
-      <div class="controls">
-        <button id="mic">🎤 Speak</button>
-        <button id="stop">⏹ Stop</button>
-        <label class="voice-picker">
-          <span>Voice</span>
-          <select id="voiceSelect"></select>
-        </label>
-        <span class="status" id="status">Voice ready</span>
+      <div class="hint">Try: “I’m nervous about a big meeting” or “I actually did something good today.”</div>
+      <div class="mode-toggle">
+        <button class="mode-btn" id="modeSupport" type="button">Emotional Support</button>
+        <button class="mode-btn active" id="modeVibe" type="button">Vibe</button>
       </div>
       <div class="composer">
         <input id="input" placeholder="Type a message..." />
@@ -106,18 +131,26 @@
       const messages = document.getElementById('messages');
       const input = document.getElementById('input');
       const sendBtn = document.getElementById('send');
-      const micBtn = document.getElementById('mic');
-      const stopBtn = document.getElementById('stop');
-      const statusEl = document.getElementById('status');
-      const voiceSelect = document.getElementById('voiceSelect');
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      let recognition;
-      let speaking = false;
-      let availableVoices = [];
+      const modeSupportBtn = document.getElementById('modeSupport');
+      const modeVibeBtn = document.getElementById('modeVibe');
+      let currentMode = 'vibe';
 
-      function setStatus(text) {
-        statusEl.textContent = text;
-      }
+      const ONBOARDING_QUESTIONS = [
+        { key: 'name', text: "First things first — what should I call you?" },
+        { key: 'color', text: "What's your favorite color?" },
+        { key: 'likes', text: "What's something you genuinely love doing?" },
+        { key: 'proud_of', text: "What's something you're proud of, big or small?" },
+        { key: 'goal', text: "Is there something you're currently working toward?" },
+        { key: 'scenery', text: "What kind of pictures make you happiest — nature, ocean, mountains, space, city lights, animals, something else?" },
+        { key: 'picture_things', text: "Anything specific you love seeing in pictures? (pets, flowers, food, art...)" },
+        { key: 'animal', text: "If you had a spirit animal, what would it be?" },
+        { key: 'season', text: "Which season makes you happiest — spring, summer, fall, or winter?" },
+        { key: 'vibe_word', text: "In one word, what vibe are you going for today?" },
+      ];
+
+      let profile = null;
+      try { profile = JSON.parse(localStorage.getItem('ariProfile') || 'null'); } catch (e) { profile = null; }
+      let onboarding = null;
 
       function addMessage(text, who) {
         const div = document.createElement('div');
@@ -127,39 +160,84 @@
         messages.scrollTop = messages.scrollHeight;
       }
 
-      function populateVoices() {
-        if (!('speechSynthesis' in window)) return;
-        availableVoices = window.speechSynthesis.getVoices();
-        const current = voiceSelect.value;
-        voiceSelect.innerHTML = '';
-        const defaultOption = document.createElement('option');
-        defaultOption.value = '';
-        defaultOption.textContent = 'Default voice';
-        voiceSelect.appendChild(defaultOption);
-        availableVoices.forEach((voice) => {
-          const option = document.createElement('option');
-          option.value = voice.name;
-          option.textContent = `${voice.name} (${voice.lang})`;
-          if (current && voice.name === current) option.selected = true;
-          voiceSelect.appendChild(option);
-        });
-        if (!voiceSelect.value && availableVoices.length) {
-          voiceSelect.value = availableVoices[0].name;
+      function applyBackgroundImages(keywords) {
+        const bg = document.getElementById('bgPhotos');
+        bg.innerHTML = '';
+        const terms = (keywords || []).filter(Boolean);
+        if (!terms.length) return;
+        for (let i = 0; i < 4; i++) {
+          const term = terms[i % terms.length];
+          const img = document.createElement('img');
+          img.src = `https://loremflickr.com/800/800/${encodeURIComponent(term)}?lock=${i}`;
+          img.alt = '';
+          img.loading = 'lazy';
+          bg.appendChild(img);
         }
       }
 
-      function speakText(text) {
-        if (!('speechSynthesis' in window)) return;
-        if (speaking) window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'en-US';
-        const selectedVoice = availableVoices.find((voice) => voice.name === voiceSelect.value);
-        if (selectedVoice) utterance.voice = selectedVoice;
-        utterance.rate = 1.0;
-        utterance.pitch = 1.0;
-        speaking = true;
-        utterance.onend = () => { speaking = false; };
-        window.speechSynthesis.speak(utterance);
+      function applyTheme(theme) {
+        if (!theme || !theme.primary || !theme.secondary) return;
+        const root = document.documentElement;
+        root.style.setProperty('--accent-1', theme.primary);
+        root.style.setProperty('--accent-2', theme.secondary);
+        if (theme.title) root.style.setProperty('--title-color', theme.title);
+        root.style.setProperty('--bg-gradient', `linear-gradient(135deg, ${theme.primary}33 0%, ${theme.secondary}33 60%, ${theme.primary}22 100%)`);
+        root.style.setProperty('--header-gradient', `linear-gradient(90deg, ${theme.primary}55, ${theme.secondary}55)`);
+        root.style.setProperty('--messages-gradient', `linear-gradient(180deg, ${theme.primary}22, ${theme.secondary}22)`);
+      }
+
+      function setMode(mode) {
+        currentMode = mode;
+        modeSupportBtn.classList.toggle('active', mode === 'support');
+        modeVibeBtn.classList.toggle('active', mode === 'vibe');
+        if (mode === 'vibe' && !profile && !onboarding) startOnboarding();
+      }
+      modeSupportBtn.addEventListener('click', () => setMode('support'));
+      modeVibeBtn.addEventListener('click', () => setMode('vibe'));
+
+      function startOnboarding() {
+        onboarding = { index: 0, answers: {} };
+        addMessage("Before we vibe, I want to know you a little. A few quick questions.", 'bot');
+        addMessage(ONBOARDING_QUESTIONS[0].text, 'bot');
+      }
+
+      async function finishOnboarding() {
+        addMessage('Give me a second, setting things up just for you...', 'bot');
+        const answers = onboarding.answers;
+        try {
+          const response = await fetch('/api/theme', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(answers),
+          });
+          const data = await response.json();
+          const last = messages.lastElementChild;
+          if (last) last.remove();
+          const imageKeywords = [answers.scenery, answers.picture_things, answers.animal, answers.season, answers.likes, answers.color].filter(Boolean);
+          profile = { ...answers, theme: data.theme || null, images: imageKeywords };
+          localStorage.setItem('ariProfile', JSON.stringify(profile));
+          applyTheme(profile.theme);
+          applyBackgroundImages(profile.images);
+          addMessage(`Got it, ${profile.name || 'friend'} — I set the colors and pictures around your vibe. Let's talk.`, 'bot');
+        } catch (e) {
+          const last = messages.lastElementChild;
+          if (last) last.remove();
+          const imageKeywords = [answers.scenery, answers.picture_things, answers.animal, answers.season, answers.likes, answers.color].filter(Boolean);
+          profile = { ...answers, theme: null, images: imageKeywords };
+          localStorage.setItem('ariProfile', JSON.stringify(profile));
+          applyBackgroundImages(profile.images);
+          addMessage(`Got it, ${profile.name || 'friend'} — couldn't set the theme, but I've still got you.`, 'bot');
+        }
+        onboarding = null;
+      }
+
+      function buildContext(p) {
+        if (!p) return '';
+        const facts = [];
+        if (p.proud_of) facts.push(`proud of: ${p.proud_of}`);
+        if (p.goal) facts.push(`working toward: ${p.goal}`);
+        if (p.likes) facts.push(`loves doing: ${p.likes}`);
+        return facts.join('; ');
       }
 
       async function send(text) {
@@ -167,19 +245,30 @@
         if (!value) return;
         addMessage(value, 'user');
         input.value = '';
+
+        if (onboarding) {
+          onboarding.answers[ONBOARDING_QUESTIONS[onboarding.index].key] = value;
+          onboarding.index += 1;
+          if (onboarding.index < ONBOARDING_QUESTIONS.length) {
+            addMessage(ONBOARDING_QUESTIONS[onboarding.index].text, 'bot');
+          } else {
+            await finishOnboarding();
+          }
+          return;
+        }
+
         addMessage('Thinking...', 'bot');
         try {
           const response = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: value })
+            body: JSON.stringify({ message: value, mode: currentMode, name: profile && profile.name, context: buildContext(profile) }),
           });
           const data = await response.json();
           const last = messages.lastElementChild;
           if (last) last.remove();
           const reply = data.reply || 'Sorry, I could not reply.';
           addMessage(reply, 'bot');
-          speakText(reply);
         } catch (e) {
           const last = messages.lastElementChild;
           if (last) last.remove();
@@ -187,51 +276,18 @@
         }
       }
 
-      if (SpeechRecognition) {
-        recognition = new SpeechRecognition();
-        recognition.continuous = false;
-        recognition.interimResults = false;
-        recognition.lang = 'en-US';
-        recognition.onstart = () => setStatus('Listening...');
-        recognition.onerror = () => setStatus('Voice unavailable');
-        recognition.onend = () => setStatus('Voice ready');
-        recognition.onresult = (event) => {
-          const transcript = event.results[0][0].transcript;
-          setStatus('Heard: ' + transcript);
-          send(transcript);
-        };
-      } else {
-        setStatus('Speech recognition not supported');
-      }
-
-      if ('speechSynthesis' in window) {
-        populateVoices();
-        window.speechSynthesis.onvoiceschanged = populateVoices;
-      }
-
-      voiceSelect.addEventListener('change', () => {
-        if (voiceSelect.value) {
-          setStatus('Voice: ' + voiceSelect.value);
-        }
-      });
-
-      stopBtn.addEventListener('click', () => {
-        if ('speechSynthesis' in window) {
-          window.speechSynthesis.cancel();
-          speaking = false;
-        }
-        if (recognition) {
-          try { recognition.stop(); } catch (e) {}
-        }
-        setStatus('Voice stopped');
-      });
-
-      micBtn.addEventListener('click', () => {
-        if (recognition) recognition.start();
-      });
       sendBtn.addEventListener('click', () => send());
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
-      addMessage('Hi! I am Ari, your friendly local robot. Ask me anything.', 'bot');
+
+      if (profile && profile.theme) applyTheme(profile.theme);
+      if (profile && profile.images) applyBackgroundImages(profile.images);
+      if (currentMode === 'vibe' && !profile) {
+        startOnboarding();
+      } else if (profile && profile.name) {
+        addMessage(`Hey ${profile.name}, I'm Ari — good to see you again.`, 'bot');
+      } else {
+        addMessage("Hey, I'm Ari. Tell me what's on your mind, or something you're proud of, and let's build on it.", 'bot');
+      }
     </script>
   </body>
 </html>
