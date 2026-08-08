@@ -20,28 +20,13 @@
       body {
         margin: 0;
         font-family: Inter, Segoe UI, Arial, sans-serif;
+        background: var(--bg-gradient);
         color: var(--text-color);
         display: grid;
         place-items: center;
         height: 100vh;
         height: 100dvh;
         overflow: hidden;
-      }
-      .bg-photos {
-        position: fixed;
-        inset: 0;
-        z-index: -2;
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        grid-template-rows: repeat(2, 1fr);
-      }
-      .bg-photos img { width: 100%; height: 100%; object-fit: cover; display: block; }
-      .bg-overlay {
-        position: fixed;
-        inset: 0;
-        z-index: -1;
-        background: var(--bg-gradient);
-        opacity: 0.78;
       }
       .card {
         width: min(94vw, 760px);
@@ -107,8 +92,6 @@
     </style>
   </head>
   <body>
-    <div class="bg-photos" id="bgPhotos"></div>
-    <div class="bg-overlay"></div>
     <div class="card">
       <div class="header">
         <div>
@@ -141,8 +124,6 @@
         { key: 'likes', text: "What's something you genuinely love doing?" },
         { key: 'proud_of', text: "What's something you're proud of, big or small?" },
         { key: 'goal', text: "Is there something you're currently working toward?" },
-        { key: 'scenery', text: "What kind of pictures make you happiest — nature, ocean, mountains, space, city lights, animals, something else?" },
-        { key: 'picture_things', text: "Anything specific you love seeing in pictures? (pets, flowers, food, art...)" },
         { key: 'animal', text: "If you had a spirit animal, what would it be?" },
         { key: 'season', text: "Which season makes you happiest — spring, summer, fall, or winter?" },
         { key: 'vibe_word', text: "In one word, what vibe are you going for today?" },
@@ -158,21 +139,6 @@
         div.textContent = text;
         messages.appendChild(div);
         messages.scrollTop = messages.scrollHeight;
-      }
-
-      function applyBackgroundImages(keywords) {
-        const bg = document.getElementById('bgPhotos');
-        bg.innerHTML = '';
-        const terms = (keywords || []).filter(Boolean);
-        if (!terms.length) return;
-        for (let i = 0; i < 4; i++) {
-          const term = terms[i % terms.length];
-          const img = document.createElement('img');
-          img.src = `https://loremflickr.com/800/800/${encodeURIComponent(term)}?lock=${i}`;
-          img.alt = '';
-          img.loading = 'lazy';
-          bg.appendChild(img);
-        }
       }
 
       function applyTheme(theme) {
@@ -213,19 +179,15 @@
           const data = await response.json();
           const last = messages.lastElementChild;
           if (last) last.remove();
-          const imageKeywords = [answers.scenery, answers.picture_things, answers.animal, answers.season, answers.likes, answers.color].filter(Boolean);
-          profile = { ...answers, theme: data.theme || null, images: imageKeywords };
+          profile = { ...answers, theme: data.theme || null };
           localStorage.setItem('ariProfile', JSON.stringify(profile));
           applyTheme(profile.theme);
-          applyBackgroundImages(profile.images);
-          addMessage(`Got it, ${profile.name || 'friend'} — I set the colors and pictures around your vibe. Let's talk.`, 'bot');
+          addMessage(`Got it, ${profile.name || 'friend'} — I set the colors around your vibe. Let's talk.`, 'bot');
         } catch (e) {
           const last = messages.lastElementChild;
           if (last) last.remove();
-          const imageKeywords = [answers.scenery, answers.picture_things, answers.animal, answers.season, answers.likes, answers.color].filter(Boolean);
-          profile = { ...answers, theme: null, images: imageKeywords };
+          profile = { ...answers, theme: null };
           localStorage.setItem('ariProfile', JSON.stringify(profile));
-          applyBackgroundImages(profile.images);
           addMessage(`Got it, ${profile.name || 'friend'} — couldn't set the theme, but I've still got you.`, 'bot');
         }
         onboarding = null;
@@ -280,7 +242,6 @@
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
 
       if (profile && profile.theme) applyTheme(profile.theme);
-      if (profile && profile.images) applyBackgroundImages(profile.images);
       if (currentMode === 'vibe' && !profile) {
         startOnboarding();
       } else if (profile && profile.name) {
